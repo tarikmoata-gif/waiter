@@ -14,3 +14,8 @@ Output: app/build/outputs/apk/debug/app-debug.apk
 
 ## First run
 Settings: Odoo URL, DB name, login (tablet1), API key, printer IP. Save & connect.
+
+## Printer auto-discovery
+Settings -> Kitchen printer -> "Scan network" checks TCP port 9100 on your /24 subnet.
+One hit is filled in automatically; several hits are listed (use "Test print" to identify yours).
+"Auto-find printer" re-scans and reconnects if a print fails (only when exactly one printer answers).

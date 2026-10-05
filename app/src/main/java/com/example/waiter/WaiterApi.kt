@@ -35,8 +35,6 @@ data class PrintedLine(val name: String, val qty: Double, val note: String)
 data class OrderResult(val ok: Boolean, val error: String?, val order_ref: String?,
                        val table: String?, val new_lines: List<PrintedLine>?)
 
-data class SendOutcome(val order: OrderResult, val printError: String?)
-
 interface OdooService {
     @POST("web/session/authenticate")
     suspend fun authenticate(@Body b: RpcRequest<AuthParams>): RpcResponse<Map<String, Any>>
@@ -62,7 +60,7 @@ class WaiterRepository(
     private val db: String,
     private val login: String,
     private val apiKey: String,
-    private val printerIp: String,   // "192.168.1.50"
+    var printerIp: String,   // "192.168.1.50"
 ) {
     private val service: OdooService = Retrofit.Builder()
         .baseUrl(baseUrl.trim().let { if (it.endsWith("/")) it else "$it/" })
@@ -92,13 +90,11 @@ class WaiterRepository(
 
     suspend fun loadMenu(): MenuResult = call { service.menu(RpcRequest(params = Empty())) }
 
-    /** Sends the order to Odoo, then prints ONLY the newly added lines in the kitchen. */
-    suspend fun sendOrder(tableId: Int, lines: List<OrderLine>): SendOutcome {
+    /** Creates/extends the order in Odoo. Printing is done separately by the caller. */
+    suspend fun sendOrder(tableId: Int, lines: List<OrderLine>): OrderResult {
         val res = call { service.order(RpcRequest(params = OrderParams(tableId, lines))) }
         if (!res.ok) error(res.error ?: "Order rejected")
-        // The order is already in Odoo here; a print failure must NOT trigger a resend.
-        val printError = try { printKitchenTicket(res); null } catch (e: Exception) { e.message ?: "Printer error" }
-        return SendOutcome(res, printError)
+        return res
     }
 
     suspend fun printKitchenTicket(o: OrderResult) = withContext(Dispatchers.IO) {
@@ -112,7 +108,7 @@ class WaiterRepository(
         }
         sb.append("\n")
         // 203 dpi, 80 mm paper, 42 chars per line
-        val printer = EscPosPrinter(TcpConnection(printerIp, 9100, 5000), 203, 80f, 42)
+        val printer = EscPosPrinter(TcpConnection(printerIp, 9100, 3000), 203, 80f, 42)
         printer.printFormattedTextAndCut(sb.toString())
         printer.disconnectPrinter()
     }
